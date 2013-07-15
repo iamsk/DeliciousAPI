@@ -921,7 +921,7 @@ class DeliciousAPI(object):
             # is about 100 if any. So if we need more than 100, we start
             # scraping the Delicious.com website directly
             if max_bookmarks > 0 and max_bookmarks <= 100:
-                path = "/v2/json/%s?count=100" % username
+                path = "/v2/json/%s?count=%d" % (username, max_bookmarks)
                 data = self._query(path, host="feeds.delicious.com", user=username)
                 if data:
                     posts = []
@@ -968,6 +968,61 @@ class DeliciousAPI(object):
                 # TODO: retrieve the first 100 bookmarks via JSON before
                 #       falling back to scraping the delicous.com website
                 user.bookmarks = self.get_bookmarks(username=username, max_bookmarks=max_bookmarks, sleep_seconds=sleep_seconds)
+        return user
+
+    def get_user_with_tag(self, username, tag, max_bookmarks=50):
+        assert username
+        assert tag
+        user = DeliciousUser(username)
+        bookmarks = []
+        if max_bookmarks > 0 and max_bookmarks <= 100:
+            path = "/v2/json/%s/%s?count=%s" % (username, tag, max_bookmarks)
+            data = self._query(path, host="feeds.delicious.com", user=username)
+            if data:
+                posts = []
+                try:
+                    posts = simplejson.loads(data)
+                except TypeError:
+                    pass
+
+                url = timestamp = None
+                title = comment = u""
+                tags = []
+
+                for post in posts:
+                    # url
+                    try:
+                        url = post['u']
+                    except KeyError:
+                        pass
+                    # title
+                    try:
+                        title = post['d']
+                    except KeyError:
+                        pass
+                    # tags
+                    try:
+                        tags = post['t']
+                    except KeyError:
+                        pass
+                    if not tags:
+                        tags = [u"system:unfiled"]
+                    # comment / notes
+                    try:
+                        comment = post['n']
+                    except KeyError:
+                        pass
+                    # bookmark creation time
+                    try:
+                        timestamp = datetime.datetime.strptime(post['dt'], "%Y-%m-%dT%H:%M:%SZ")
+                    except KeyError:
+                        pass
+                    bookmarks.append( (url, tags, title, comment, timestamp) )
+                user.bookmarks = bookmarks[:max_bookmarks]
+        else:
+            # TODO: retrieve the first 100 bookmarks via JSON before
+            #       falling back to scraping the delicous.com website
+            user.bookmarks = self.get_bookmarks(username=username, max_bookmarks=max_bookmarks, sleep_seconds=sleep_seconds)
         return user
 
     def get_urls(self, tag=None, popular=True, max_urls=100, sleep_seconds=1):
